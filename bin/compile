@@ -22,11 +22,8 @@ APP_GEOIP="/app/$VENDORED_GEOIP"
 GEOIP_DIST_URL="https://github.com/maxmind/geoip-api-c/releases/download/v$GEOIP_VERSION/GeoIP-$GEOIP_VERSION.tar.gz"
 GEOIP_DIST_DIR="GeoIP-$GEOIP_VERSION"
 
-GEOLITECITY_URL="http://geolite.maxmind.com/download/geoip/database/GeoLiteCity.dat.gz"
+GEOLITECITY_URL="https://s3.amazonaws.com/shopify/s/files/2aee18af95c47346ccf4ee7e315a5d62/GeoIPCity.dat.gz"
 GEOLITECITY_FILE="GeoLiteCity.dat"
-
-GEOLITECOUNTRY_URL="http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz"
-GEOLITECOUNTRY_FILE="GeoIP.dat"
 
 
 puts-step "Installing Maxmind GeoIP C Library $GEOIP_VERSION"
@@ -41,15 +38,6 @@ cd $GEOIP_DIST_DIR
 make install > /dev/null
 
 cd $BUILD_DIR
-
-if [ ! -f $GEOLITECOUNTRY_FILE ]; then
-    curl -s -L -o ${GEOLITECOUNTRY_FILE}.gz $GEOLITECOUNTRY_URL
-    gunzip ${GEOLITECOUNTRY_FILE}.gz > /dev/null
-fi
-
-GEOCOUNTRY_LITE_PATH="/app/${GEOLITECOUNTRY_FILE}"
-set-env "GEOCOUNTRY_LITE_PATH" $GEOCOUNTRY_LITE_PATH
-puts "GeoIP Country Database is available at: ${GEOCOUNTRY_LITE_PATH}"
 
 if [ ! -f $GEOLITECITY_FILE ]; then
     curl -s -L -o ${GEOLITECITY_FILE}.gz $GEOLITECITY_URL
