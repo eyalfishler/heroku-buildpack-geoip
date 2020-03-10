@@ -16,8 +16,7 @@ then
     echo "-----> MAXMIND_LICENSE_KEY set - proceeding with installation"
     MAXMIND_LICENSE_KEY=$(cat $ENV_DIR/MAXMIND_LICENSE_KEY)
 else
-    #echo "-----> MAXMIND_LICENSE_KEY not set - ignoring installation"
-    #exit 0
+    echo "-----> MAXMIND_LICENSE_KEY not set"
 fi
 
 #a URL to the city file must end with tar.gz
@@ -26,18 +25,16 @@ then
     echo "-----> MAXMIND_S3_CITY set - proceeding with installation"
     MAXMIND_S3_CITY=$(cat $ENV_DIR/MAXMIND_S3_CITY)
 else
-    #echo "-----> MAXMIND_LICENSE_KEY not set - ignoring installation"
-    #exit 0
+    echo "-----> MAXMIND_S3_CITY not set"
 fi
 
 #a URL to the country file must end with tar.gz
 if [[ -s "$ENV_DIR/MAXMIND_S3_COUNTRY" ]]
 then
-    echo "-----> MAXMIND_S3_CITY set - proceeding with installation"
+    echo "-----> MAXMIND_S3_COUNTRY set - proceeding with installation"
     MAXMIND_S3_COUNTRY=$(cat $ENV_DIR/MAXMIND_S3_COUNTRY)
 else
-    #echo "-----> MAXMIND_LICENSE_KEY not set - ignoring installation"
-    #exit 0
+    echo "-----> MAXMIND_S3_COUNTRY not set"
 fi
 
 if [[ -s "$ENV_DIR/MAXMIND_API_VERSION" ]]
@@ -45,7 +42,7 @@ then
     echo "-----> MAXMIND_API_VERSION set - proceeding with installation"
     MAXMIND_API_VERSION=$(cat $ENV_DIR/MAXMIND_API_VERSION)
 else
-    #echo "-----> MAXMIND_LICENSE_KEY not set - ignoring installation"
+    echo "-----> MAXMIND_API_VERSION not set - setting default to 1.6.12"
     MAXMIND_API_VERSION="1.6.12"
 fi
 
