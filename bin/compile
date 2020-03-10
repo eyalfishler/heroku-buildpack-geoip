@@ -42,12 +42,12 @@ then
     echo "-----> MAXMIND_API_VERSION set - proceeding with installation"
     MAXMIND_API_VERSION=$(cat $ENV_DIR/MAXMIND_API_VERSION)
 else
-    echo "-----> MAXMIND_API_VERSION not set - setting default to 1.6.12"
-    MAXMIND_API_VERSION="1.6.12"
+    echo "-----> MAXMIND_API_VERSION not set - setting default to 1.4.2"
+    MAXMIND_API_VERSION="1.4.2"
 fi
 
 
-#https://github.com/maxmind/geoip-api-c/releases 1.6.12 is the latest release 
+#https://github.com/maxmind/libmaxminddb/releases 1.4.2 is the latest release 
 LIBMAXMINDDB_VERSION=$MAXMIND_API_VERSION
 GEOLITE2_CITY_FILENAME="GeoLite2-City.mmdb"
 GEOLITE2_CITY_TARBALL_FILENAME="GeoLite2-City.tar.gz"
