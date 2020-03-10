@@ -1,4 +1,4 @@
-heroku-buildpack-geoip
+heroku-buildpack-geoip2
 ======================
 
 This should be used with https://github.com/ddollar/heroku-buildpack-multi

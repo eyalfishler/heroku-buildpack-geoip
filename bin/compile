@@ -1,49 +1,192 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-# grab environment args
+set -e
+
+
 BUILD_DIR=$1
 CACHE_DIR=$2
-ENV_FILE=$3
+ENV_DIR=$3
+
+# see https://devcenter.heroku.com/articles/buildpack-api - during compilation
+# app env vars exist only as files within the ENV_VAR directory
+# if you set MAXMIND_LICENSE_KEY we will ignore the MAXMIND_S3_CITY MAXMIND_S3_COUNTRY Urls and just
+# download the file using the provided license
+if [[ -s "$ENV_DIR/MAXMIND_LICENSE_KEY" ]]
+then
+    echo "-----> MAXMIND_LICENSE_KEY set - proceeding with installation"
+    MAXMIND_LICENSE_KEY=$(cat $ENV_DIR/MAXMIND_LICENSE_KEY)
+else
+    #echo "-----> MAXMIND_LICENSE_KEY not set - ignoring installation"
+    #exit 0
+fi
+
+#a URL to the city file must end with tar.gz
+if [[ -s "$ENV_DIR/MAXMIND_S3_CITY" ]]
+then
+    echo "-----> MAXMIND_S3_CITY set - proceeding with installation"
+    MAXMIND_S3_CITY=$(cat $ENV_DIR/MAXMIND_S3_CITY)
+else
+    #echo "-----> MAXMIND_LICENSE_KEY not set - ignoring installation"
+    #exit 0
+fi
+
+#a URL to the country file must end with tar.gz
+if [[ -s "$ENV_DIR/MAXMIND_S3_COUNTRY" ]]
+then
+    echo "-----> MAXMIND_S3_CITY set - proceeding with installation"
+    MAXMIND_S3_COUNTRY=$(cat $ENV_DIR/MAXMIND_S3_COUNTRY)
+else
+    #echo "-----> MAXMIND_LICENSE_KEY not set - ignoring installation"
+    #exit 0
+fi
+
+if [[ -s "$ENV_DIR/MAXMIND_API_VERSION" ]]
+then
+    echo "-----> MAXMIND_API_VERSION set - proceeding with installation"
+    MAXMIND_API_VERSION=$(cat $ENV_DIR/MAXMIND_API_VERSION)
+else
+    #echo "-----> MAXMIND_LICENSE_KEY not set - ignoring installation"
+    MAXMIND_API_VERSION="1.6.12"
+fi
+
+
+#https://github.com/maxmind/geoip-api-c/releases 1.6.12 is the latest release 
+LIBMAXMINDDB_VERSION=$MAXMIND_API_VERSION
+GEOLITE2_CITY_FILENAME="GeoLite2-City.mmdb"
+GEOLITE2_CITY_TARBALL_FILENAME="GeoLite2-City.tar.gz"
+GEOLITE2_COUNTRY_FILENAME="GeoLite2-Country.mmdb"
+GEOLITE2_COUNTRY_TARBALL_FILENAME="GeoLite2-Country.tar.gz"
+
+BUILD_DIST_DIR="$BUILD_DIR/.geoip"
+BUILD_DIST_SHARE_DIR="$BUILD_DIST_DIR/share"
+
+GEOIP_CACHE_DIR="$CACHE_DIR/geoip"
+LIBMAXMINDDB_CACHE_DIR="$GEOIP_CACHE_DIR/libmaxminddb"
+LIBMAXMINDDB_CACHE_DIST_DIR="$GEOIP_CACHE_DIR/libmaxminddb/dist"
+LIBMAXMINDDB_CACHE_VERSION_FILE="$LIBMAXMINDDB_CACHE_DIR/libmaxminddb-version"
+
+echo "-----> Installing GeoLite2 data and libmaxminddb from https://www.maxmind.com"
+
+mkdir -p "$BUILD_DIST_DIR"
+mkdir -p "$BUILD_DIST_SHARE_DIR"
+mkdir -p "$GEOIP_CACHE_DIR"
+mkdir -p "$LIBMAXMINDDB_CACHE_DIST_DIR"
+
+
+if [[ -s "$ENV_DIR/MAXMIND_S3_CITY" ]]
+then
+    echo "       Downloading GeoLite2 City and Country data using MAXMIND_S3_CITY"
+
+    # see https://dev.maxmind.com/geoip/geoipupdate/ (Direct Downloads version)
+    wget --quiet --output-document "$GEOIP_CACHE_DIR/$GEOLITE2_CITY_TARBALL_FILENAME" \
+         "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=$MAXMIND_LICENSE_KEY&suffix=tar.gz"
+
+    wget --quiet --output-document "$GEOIP_CACHE_DIR/$GEOLITE2_COUNTRY_TARBALL_FILENAME" \
+         "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=$MAXMIND_LICENSE_KEY&suffix=tar.gz"
+else
+    echo "       Downloading GeoLite2 City and Country data using MAXMIND_S3_COUNTRY and MAXMIND_S3_CITY"
+
+    wget --quiet --output-document "$GEOIP_CACHE_DIR/$GEOLITE2_CITY_TARBALL_FILENAME" \
+         "$MAXMIND_S3_CITY"
+
+    wget --quiet --output-document "$GEOIP_CACHE_DIR/$GEOLITE2_COUNTRY_TARBALL_FILENAME" \
+         "$MAXMIND_S3_COUNTRY"
+fi
+
+
+echo "       Unzipping City and Country data"
+
+tar -xvf "$GEOIP_CACHE_DIR/$GEOLITE2_CITY_TARBALL_FILENAME" --directory "$BUILD_DIST_SHARE_DIR" --no-anchored --strip-components=1 "$GEOLITE2_CITY_FILENAME"
+tar -xvf "$GEOIP_CACHE_DIR/$GEOLITE2_COUNTRY_TARBALL_FILENAME" --directory "$BUILD_DIST_SHARE_DIR" --no-anchored --strip-components=1 "$GEOLITE2_COUNTRY_FILENAME"
+
+if [ -f "$LIBMAXMINDDB_CACHE_VERSION_FILE" ] && grep -Fxq "$LIBMAXMINDDB_VERSION" "$LIBMAXMINDDB_CACHE_VERSION_FILE"; then
+    echo "       Using cached build of libmaxminddb-$LIBMAXMINDDB_VERSION"
+else
+    WORK_DIR=$(mktemp -d)
+    DIST_DIR="$WORK_DIR/dist"
+    TAR_FILE_PATH="$WORK_DIR/libmaxminddb.tar.gz"
+
+    mkdir -p "$DIST_DIR"
+
+    echo "       Downloading libmaxminddb-$LIBMAXMINDDB_VERSION"
+
+    wget -q -P "$WORK_DIR" "https://github.com/maxmind/libmaxminddb/releases/download/$LIBMAXMINDDB_VERSION/libmaxminddb-$LIBMAXMINDDB_VERSION.tar.gz"
+
+    tar -xf "$WORK_DIR/libmaxminddb-$LIBMAXMINDDB_VERSION.tar.gz" --directory "$WORK_DIR" --strip-components=1
+
+    echo "       Building libmaxminddb-$LIBMAXMINDDB_VERSION"
+
+    pushd "$WORK_DIR" > /dev/null
+    ./configure --quiet --prefix "$LIBMAXMINDDB_CACHE_DIST_DIR"
+    make >/dev/null || make
+    make --silent check
+    make --silent install
+    popd
+
+    rm -r "$WORK_DIR"
+
+    echo "$LIBMAXMINDDB_VERSION" > "$LIBMAXMINDDB_CACHE_VERSION_FILE"
+fi
+
+cp -r "$LIBMAXMINDDB_CACHE_DIST_DIR/." "$BUILD_DIST_DIR"
+
+echo "       Set environment variables GEOIP_GEOLITE2_PATH, GEOIP_GEOLITE2_CITY_FILENAME, GEOIP_GEOLITE2_COUNTRY_FILENAME"
+
+mkdir -p $BUILD_DIR/.profile.d
+cat <<EOF >$BUILD_DIR/.profile.d/geoip.sh
+export GEOIP_GEOLITE2_PATH="\$HOME/.geoip/share/"
+export GEOIP_GEOLITE2_CITY_FILENAME="$GEOLITE2_CITY_FILENAME"
+export GEOIP_GEOLITE2_COUNTRY_FILENAME="$GEOLITE2_COUNTRY_FILENAME"
+export LD_LIBRARY_PATH="\$HOME/.geoip/lib:\$LD_LIBRARY_PATH"
+export PATH="\$HOME/.geoip/bin:\$PATH"
+EOF
+
+cp $BUILD_DIR/.profile.d/geoip.sh ./export
+
+# grab environment args
+#BUILD_DIR=$1
+#CACHE_DIR=$2
+#ENV_FILE=$3
 
 # Paths.
-BIN_DIR=$(cd $(dirname $0); pwd) # absolute path
-ROOT_DIR=$(dirname $BIN_DIR)
+#BIN_DIR=$(cd $(dirname $0); pwd) # absolute path
+#ROOT_DIR=$(dirname $BIN_DIR)
 
 # Syntax sugar.
-source $BIN_DIR/utils
+#source $BIN_DIR/utils
 
-GEOIP_VERSION="1.6.12"
+#GEOIP_VERSION="1.6.12"
 
-VENDORED_GEOIP="vendor/geoip/1.6.12"
-APP_GEOIP="/app/$VENDORED_GEOIP"
+#VENDORED_GEOIP="vendor/geoip/1.6.12"
+#APP_GEOIP="/app/$VENDORED_GEOIP"
 
 # Maxmind GeoIP C library
 
-GEOIP_DIST_URL="https://github.com/maxmind/geoip-api-c/releases/download/v$GEOIP_VERSION/GeoIP-$GEOIP_VERSION.tar.gz"
-GEOIP_DIST_DIR="GeoIP-$GEOIP_VERSION"
+#GEOIP_DIST_URL="https://github.com/maxmind/geoip-api-c/releases/download/v$GEOIP_VERSION/GeoIP-$GEOIP_VERSION.tar.gz"
+#GEOIP_DIST_DIR="GeoIP-$GEOIP_VERSION"
 
-GEOLITECITY_URL="https://s3.amazonaws.com/shopify/s/files/2aee18af95c47346ccf4ee7e315a5d62/GeoIPCity.dat.gz"
-GEOLITECITY_FILE="GeoLiteCity.dat"
+#GEOLITECITY_URL="https://s3.amazonaws.com/shopify/s/files/2aee18af95c47346ccf4ee7e315a5d62/GeoIPCity.dat.gz"
+#GEOLITECITY_FILE="GeoLiteCity.dat"
 
 
-puts-step "Installing Maxmind GeoIP C Library $GEOIP_VERSION"
-if [ ! -d "$CACHE_DIR/.geoip/$GEOIP_VERSION" ]; then
-    mkdir -p $CACHE_DIR/.geoip/$GEOIP_VERSION
-fi
+#puts-step "Installing Maxmind GeoIP C Library $GEOIP_VERSION"
+#if [ ! -d "$CACHE_DIR/.geoip/$GEOIP_VERSION" ]; then
+#    mkdir -p $CACHE_DIR/.geoip/$GEOIP_VERSION
+#fi
 
-curl -s -L -o geoip.tar.gz $GEOIP_DIST_URL
-tar -zxvf geoip.tar.gz > /dev/null
-cd $GEOIP_DIST_DIR
-./configure --prefix=$BUILD_DIR/.heroku/vendor > /dev/null
-make install > /dev/null
+#curl -s -L -o geoip.tar.gz $GEOIP_DIST_URL
+#tar -zxvf geoip.tar.gz > /dev/null
+#cd $GEOIP_DIST_DIR
+#./configure --prefix=$BUILD_DIR/.heroku/vendor > /dev/null
+#make install > /dev/null
 
-cd $BUILD_DIR
+#cd $BUILD_DIR
 
-if [ ! -f $GEOLITECITY_FILE ]; then
-    curl -s -L -o ${GEOLITECITY_FILE}.gz $GEOLITECITY_URL
-    gunzip ${GEOLITECITY_FILE}.gz > /dev/null
-fi
+#if [ ! -f $GEOLITECITY_FILE ]; then
+#    curl -s -L -o ${GEOLITECITY_FILE}.gz $GEOLITECITY_URL
+#    gunzip ${GEOLITECITY_FILE}.gz > /dev/null
+#fi
 
-GEOCITY_LITE_PATH="/app/${GEOLITECITY_FILE}"
-set-env "GEOCITY_LITE_PATH" $GEOCITY_LITE_PATH
-puts "GeoIP City Database is available at: ${GEOCITY_LITE_PATH}"
+#GEOCITY_LITE_PATH="/app/${GEOLITECITY_FILE}"
+#set-env "GEOCITY_LITE_PATH" $GEOCITY_LITE_PATH
+#puts "GeoIP City Database is available at: ${GEOCITY_LITE_PATH}"
